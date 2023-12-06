@@ -83,7 +83,7 @@ class SegAnyThread(QThread):
 
                     image_path = os.path.join(self.mainwindow.image_root, self.mainwindow.files_list[index])
                     self.results_dict[index] = {}
-                    image_data = np.array(Image.open(image_path))
+                    image_data = np.array(Image.open(image_path).convert("RGB"))
                     try:
                         features, original_size, input_size = self.sam_encoder(image_data)
                     except Exception as e:

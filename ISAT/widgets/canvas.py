@@ -24,7 +24,7 @@ class AnnotationScene(QtWidgets.QGraphicsScene):
         self.click_points_mode = []                         # SAM point prompt
         self.prompt_points = []
         self.masks:np.ndarray = None
-        self.mask_alpha = 0.5
+        self.mask_alpha = 0.3
         self.top_layer = 1
 
         self.guide_line_x:QtWidgets.QGraphicsLineItem = None
@@ -40,7 +40,7 @@ class AnnotationScene(QtWidgets.QGraphicsScene):
         if self.mainwindow.use_segment_anything:
             self.mainwindow.segany.reset_image()
 
-        self.image_data = np.array(Image.open(image_path))
+        self.image_data = np.array(Image.open(image_path).convert("RGB"))
                 
         self.image_item = QtWidgets.QGraphicsPixmapItem()
         self.image_item.setZValue(0)
@@ -524,7 +524,7 @@ class AnnotationScene(QtWidgets.QGraphicsScene):
             mask_image = mask_image.astype("uint8")
             mask_image = cv2.cvtColor(mask_image, cv2.COLOR_BGR2RGB)
             # 这里通过调整原始图像的权重self.mask_alpha，来调整mask的明显程度。
-            mask_image = cv2.addWeighted(self.image_data, self.mask_alpha, mask_image, 1, 0)
+            mask_image = cv2.addWeighted(self.image_data, 1, mask_image, self.mask_alpha, 0)
             mask_image = QtGui.QImage(mask_image[:], mask_image.shape[1], mask_image.shape[0], mask_image.shape[1] * 3,
                                       QtGui.QImage.Format_RGB888)
             mask_pixmap = QtGui.QPixmap(mask_image)
