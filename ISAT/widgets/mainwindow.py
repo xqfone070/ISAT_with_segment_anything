@@ -453,6 +453,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.cfg['show_prompt'] = bool(show_prompt)
         self.show_prompt.setChecked(show_prompt)
 
+        auto_save = self.cfg.get('auto_save', False)
+        self.cfg['auto_save'] = bool(auto_save)
+        self.actionAutoSave.setChecked(self.cfg['auto_save'])
+
         self.categories_dock_widget.update_widget()
 
     def set_saved_state(self, is_saved:bool):
@@ -642,10 +646,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             return
         if self.current_index is None:
             return
-        if not self.saved:
-            result = QtWidgets.QMessageBox.question(self, 'Warning', 'Proceed without saved?', QtWidgets.QMessageBox.StandardButton.Yes|QtWidgets.QMessageBox.StandardButton.No, QtWidgets.QMessageBox.StandardButton.No)
-            if result == QtWidgets.QMessageBox.StandardButton.No:
-                return
+        if not self.check_and_save():
+            return
+
         self.current_index = self.current_index - 1
         if self.current_index < 0:
             self.current_index = 0
@@ -658,10 +661,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             return
         if self.current_index is None:
             return
-        if not self.saved:
-            result = QtWidgets.QMessageBox.question(self, 'Warning', 'Proceed without saved?', QtWidgets.QMessageBox.StandardButton.Yes|QtWidgets.QMessageBox.StandardButton.No, QtWidgets.QMessageBox.StandardButton.No)
-            if result == QtWidgets.QMessageBox.StandardButton.No:
-                return
+        if not self.check_and_save():
+            return
+
         self.current_index = self.current_index + 1
         if self.current_index > len(self.files_list)-1:
             self.current_index = len(self.files_list)-1
@@ -669,7 +671,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         else:
             self.show_image(self.current_index)
 
+    # 使用文本框输入数字跳转
     def jump_to(self):
+        if self.current_index is not None and not self.check_and_save():
+            return
+
         index = self.files_dock_widget.lineEdit_jump.text()
         if index:
             if not index.isdigit():
@@ -688,6 +694,29 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.files_dock_widget.lineEdit_jump.clear()
                 self.files_dock_widget.lineEdit_jump.clearFocus()
                 return
+
+    # 双击列表跳转
+    def jump_to2(self, index):
+        # 保存
+        if self.current_index is not None and not self.check_and_save():
+            return
+
+        self.show_image(index)
+
+    def check_and_save(self):
+        if self.saved:
+            return True
+
+        if self.cfg['auto_save']:
+            self.save()
+            return True
+
+        result = QtWidgets.QMessageBox.question(self, 'Warning', 'Proceed without saved?', QtWidgets.QMessageBox.StandardButton.Yes|QtWidgets.QMessageBox.StandardButton.No, QtWidgets.QMessageBox.StandardButton.No)
+        if result == QtWidgets.QMessageBox.StandardButton.No:
+            return False
+
+        return True
+
 
     def cancel_draw(self):
         self.scene.cancel_draw()
@@ -811,6 +840,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.actionContour_All.setChecked(contour_mode == 'all')
         self.cfg['contour_mode'] = contour_mode
 
+    def change_autosave_mode(self):
+        self.cfg['auto_save'] = not self.cfg['auto_save']
+        self.save_cfg(self.config_file)
+        self.actionAutoSave.setChecked(self.cfg['auto_save'])
+
     def change_mask_aplha(self):
         value = self.mask_aplha.value() / 10
         self.scene.mask_alpha = value
@@ -892,6 +926,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.actionEdit.triggered.connect(self.scene.edit_polygon)
         self.actionDelete.triggered.connect(self.scene.delete_selected_graph)
         self.actionSave.triggered.connect(self.save)
+        self.actionAutoSave.triggered.connect(self.change_autosave_mode)
         self.actionTo_top.triggered.connect(self.scene.move_polygon_to_top)
         self.actionTo_bottom.triggered.connect(self.scene.move_polygon_to_bottom)
 
