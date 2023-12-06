@@ -457,6 +457,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.cfg['auto_save'] = bool(auto_save)
         self.actionAutoSave.setChecked(self.cfg['auto_save'])
 
+        history_image_dir = self.cfg.get('history_image_dir', '')
+        self.cfg['history_image_dir'] = history_image_dir
+
         self.categories_dock_widget.update_widget()
 
     def set_saved_state(self, is_saved:bool):
@@ -469,9 +472,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.setWindowTitle('*{}'.format(self.current_label.label_path))
 
     def open_dir(self):
-        dir = QtWidgets.QFileDialog.getExistingDirectory(self)
+        dir = QtWidgets.QFileDialog.getExistingDirectory(self, directory=self.cfg['history_image_dir'])
         if not dir:
             return
+
+        self.cfg['history_image_dir'] = dir
+        self.save_cfg(self.config_file)
 
         self.files_list.clear()
         self.files_dock_widget.listWidget.clear()
