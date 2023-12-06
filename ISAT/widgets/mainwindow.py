@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Author  : LG
+import threading
+import queue
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 from ISAT.ui.MainWindow import Ui_MainWindow
@@ -40,7 +42,17 @@ class SegAnyThread(QThread):
         super(SegAnyThread, self).__init__()
         self.mainwindow = mainwindow
         self.results_dict = {}
-        self.index = None
+        self.task_queue = queue.Queue()
+        self.max_cache_offset = 2
+
+    def start_encode(self, index):
+        with self.task_queue.mutex:
+            self.task_queue.queue.clear()
+
+        # print('start encode image %d' % index)
+        for offset in range(self.max_cache_offset + 1):
+            self.task_queue.put([index, -offset])
+            self.task_queue.put([index, offset])
 
     @torch.no_grad()
     def sam_encoder(self, image):
@@ -58,48 +70,50 @@ class SegAnyThread(QThread):
         return features, original_size, input_size
 
     def run(self):
-        if self.index is not None:
+        while True:
+            base_index, offset = self.task_queue.get()
+            index = base_index + offset
 
-            # 需要缓存特征的图像索引，可以自行更改缓存策略
-            indexs = [self.index]
-            if self.index + 1 < len(self.mainwindow.files_list):
-                indexs += [self.index + 1]
-            if self.index - 1 > -1:
-                indexs += [self.index - 1]
+            if index < 0 or index >= len(self.mainwindow.files_list):
+                continue
 
             # 先删除不需要的旧特征
             features_ks = list(self.results_dict.keys())
             for k in features_ks:
-                if k not in indexs:
+                if k > base_index + self.max_cache_offset or k < base_index - self.max_cache_offset:
                     try:
                         del self.results_dict[k]
+                        # print('remove image %d' % k)
                         self.tag.emit(k, 0, '')  # 删除
                     except:
                         pass
 
-            for index in indexs:
-                if index not in self.results_dict:
-                    self.tag.emit(index, 2, '')    # 进行
+            # 已经计算过
+            if index in self.results_dict:
+                self.tag.emit(index, 1, '')  # 完成
+                continue
 
-                    image_path = os.path.join(self.mainwindow.image_root, self.mainwindow.files_list[index])
-                    self.results_dict[index] = {}
-                    image_data = np.array(Image.open(image_path).convert("RGB"))
-                    try:
-                        features, original_size, input_size = self.sam_encoder(image_data)
-                    except Exception as e:
-                        self.tag.emit(index, 3, '{}'.format(e))  # error
-                        del self.results_dict[index]
-                        continue
+            self.tag.emit(index, 2, '')    # 进行
 
-                    self.results_dict[index]['features'] = features
-                    self.results_dict[index]['original_size'] = original_size
-                    self.results_dict[index]['input_size'] = input_size
+            image_path = os.path.join(self.mainwindow.image_root, self.mainwindow.files_list[index])
+            self.results_dict[index] = {}
+            image_data = np.array(Image.open(image_path).convert("RGB"))
+            try:
+                features, original_size, input_size = self.sam_encoder(image_data)
+            except Exception as e:
+                self.tag.emit(index, 3, '{}'.format(e))  # error
+                del self.results_dict[index]
+                continue
 
-                    self.tag.emit(index, 1, '')    # 完成
+            self.results_dict[index]['features'] = features
+            self.results_dict[index]['original_size'] = original_size
+            self.results_dict[index]['input_size'] = input_size
 
-                    torch.cuda.empty_cache()
-                else:
-                    self.tag.emit(index, 1, '')
+            # print('encode image finished, %d' % index)
+            self.tag.emit(index, 1, '')    # 完成
+
+            torch.cuda.empty_cache()
+
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self):
@@ -568,8 +582,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
             if self.use_segment_anything and self.can_be_annotated:
                 self.segany.reset_image()
-                self.seganythread.index = index
-                self.seganythread.start()
+                self.seganythread.start_encode(index)
                 self.SeganyEnabled()
 
             self.view.zoomfit()
